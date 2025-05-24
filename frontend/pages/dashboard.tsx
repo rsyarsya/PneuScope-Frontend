@@ -1,259 +1,343 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import type { GetServerSideProps, NextPage } from "next"
 import Head from "next/head"
-import type { GetServerSideProps } from "next"
-import { useAuth } from "@/contexts/AuthContext"
-import PatientForm from "@/components/PatientForm"
-import LiveChart from "@/components/LiveChart"
-import RiskGauge from "@/components/RiskGauge"
-import PatientList from "@/components/PatientList"
-import { Play, Square, Users, Activity } from "lucide-react"
+import { useState, useEffect } from "react"
+import axios from "axios"
 import { io, type Socket } from "socket.io-client"
-import SystemStatus from "@/components/SystemStatus"
+import Navbar from "../components/Navbar"
+import PatientForm from "../components/PatientForm"
+import LiveChart from "../components/LiveChart"
+import RiskGauge from "../components/RiskGauge"
 
+// Types
 interface Patient {
   _id: string
   name: string
-  dateOfBirth: string
+  dob: string
   allergies: string
   medicalHistory: string
-  createdAt: string
 }
 
-export default function Dashboard() {
-  const { user } = useAuth()
-  const [activeTab, setActiveTab] = useState("monitor")
-  const [isCapturing, setIsCapturing] = useState(false)
-  const [audioData, setAudioData] = useState<number[]>([])
-  const [riskScore, setRiskScore] = useState<number | null>(null)
-  const [socket, setSocket] = useState<Socket | null>(null)
+interface User {
+  _id: string
+  name: string
+  email: string
+  role: "admin" | "doctor"
+}
+
+interface DashboardProps {
+  user: User
+}
+
+const Dashboard: NextPage<DashboardProps> = ({ user }) => {
   const [patients, setPatients] = useState<Patient[]>([])
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
+  const [audioData, setAudioData] = useState<number[]>([])
+  const [isCapturing, setIsCapturing] = useState(false)
+  const [socket, setSocket] = useState<Socket | null>(null)
+  const [riskScore, setRiskScore] = useState<number | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
+  // Fetch patients on component mount
   useEffect(() => {
-    // Initialize socket connection with proper URL
-    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-    const newSocket = io(socketUrl, {
-      transports: ["websocket", "polling"],
-      upgrade: true,
-      rememberUpgrade: true,
-    })
-    setSocket(newSocket)
-
-    // Listen for audio data
-    newSocket.on("audio-data", (data: number[]) => {
-      setAudioData((prev) => [...prev.slice(-59), ...data]) // Keep last 60 seconds
-    })
-
-    return () => {
-      newSocket.close()
-    }
-  }, [])
-
-  const startCapture = () => {
-    if (socket && selectedPatient) {
-      setIsCapturing(true)
-      setAudioData([])
-      setRiskScore(null)
-      socket.emit("start-capture", { patientId: selectedPatient._id })
-    }
-  }
-
-  const stopCapture = async () => {
-    if (socket) {
-      setIsCapturing(false)
-      socket.emit("stop-capture")
-
-      // Send audio data to ML service for analysis
+    const fetchPatients = async () => {
       try {
-        const mlApiUrl = process.env.NEXT_PUBLIC_ML_API_URL || "http://localhost:8000"
-        const response = await fetch(`${mlApiUrl}/predict`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ audio: audioData }),
-        })
-        const result = await response.json()
-        setRiskScore(result.risk_score)
-      } catch (error) {
-        console.error("ML prediction error:", error)
-        // Fallback: simple rule-based risk calculation
-        const maxDecibel = Math.max(...audioData)
-        setRiskScore(Math.min(maxDecibel / 100, 1))
+        const response = await axios.get("/api/patients")
+        setPatients(response.data)
+      } catch (err) {
+        setError("Failed to fetch patients")
+        console.error(err)
+      } finally {
+        setIsLoading(false)
       }
     }
+
+    fetchPatients()
+  }, [])
+
+  // Socket.io connection
+  useEffect(() => {
+    if (isCapturing && !socket) {
+      // Connect to socket server
+      const newSocket = io(process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:4000")
+
+      newSocket.on("connect", () => {
+        console.log("Connected to socket server")
+      })
+
+      newSocket.on("audio-data", (data: number[]) => {
+        setAudioData((prevData) => {
+          // Keep only the last 60 seconds of data (assuming 1 data point per second)
+          const newData = [...prevData, ...data]
+          return newData.slice(-60)
+        })
+      })
+
+      newSocket.on("disconnect", () => {
+        console.log("Disconnected from socket server")
+      })
+
+      setSocket(newSocket)
+    } else if (!isCapturing && socket) {
+      // Disconnect socket when not capturing
+      socket.disconnect()
+      setSocket(null)
+    }
+
+    // Cleanup on component unmount
+    return () => {
+      if (socket) {
+        socket.disconnect()
+      }
+    }
+  }, [isCapturing, socket])
+
+  // Function to start audio capture
+  const startCapture = () => {
+    if (!selectedPatient) {
+      alert("Please select a patient first")
+      return
+    }
+
+    setIsCapturing(true)
+    setAudioData([])
+    setRiskScore(null)
   }
 
-  const loadPatients = async () => {
+  // Function to stop audio capture and send data for analysis
+  const stopCapture = async () => {
+    setIsCapturing(false)
+
+    if (audioData.length === 0) {
+      alert("No audio data captured")
+      return
+    }
+
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-      const response = await fetch(`${apiUrl}/api/patients`, {
-        credentials: "include",
+      // Send audio data to ML service for analysis
+      const response = await axios.post("/api/predict", {
+        patientId: selectedPatient?._id,
+        audio: audioData,
       })
-      const data = await response.json()
-      setPatients(data)
-    } catch (error) {
-      console.error("Error loading patients:", error)
+
+      setRiskScore(response.data.risk_score)
+    } catch (err) {
+      console.error("Failed to analyze audio data:", err)
+      alert("Failed to analyze audio data")
     }
   }
 
+  // Function to handle patient selection
+  const handlePatientSelect = (patient: Patient) => {
+    setSelectedPatient(patient)
+    // Reset data when changing patients
+    setAudioData([])
+    setRiskScore(null)
+    setIsCapturing(false)
+  }
+
+  // Function to handle patient form submission (create/update)
+  const handlePatientSubmit = async (patientData: Omit<Patient, "_id">) => {
+    try {
+      if (selectedPatient) {
+        // Update existing patient
+        const response = await axios.put(`/api/patients/${selectedPatient._id}`, patientData)
+        setPatients((prevPatients) => prevPatients.map((p) => (p._id === selectedPatient._id ? response.data : p)))
+        setSelectedPatient(response.data)
+      } else {
+        // Create new patient
+        const response = await axios.post("/api/patients", patientData)
+        setPatients((prevPatients) => [...prevPatients, response.data])
+        setSelectedPatient(response.data)
+      }
+    } catch (err) {
+      console.error("Failed to save patient:", err)
+      alert("Failed to save patient data")
+    }
+  }
+
+  // Function to delete a patient
+  const handleDeletePatient = async (patientId: string) => {
+    if (!confirm("Are you sure you want to delete this patient?")) {
+      return
+    }
+
+    try {
+      await axios.delete(`/api/patients/${patientId}`)
+      setPatients((prevPatients) => prevPatients.filter((p) => p._id !== patientId))
+      if (selectedPatient?._id === patientId) {
+        setSelectedPatient(null)
+        setAudioData([])
+        setRiskScore(null)
+        setIsCapturing(false)
+      }
+    } catch (err) {
+      console.error("Failed to delete patient:", err)
+      alert("Failed to delete patient")
+    }
+  }
+
+  // Simulate audio data if socket is not available (for demo purposes)
   useEffect(() => {
-    loadPatients()
-  }, [])
+    if (isCapturing && !socket) {
+      const interval = setInterval(() => {
+        // Generate random audio data between 30-80 dB
+        const randomData = Array(5)
+          .fill(0)
+          .map(() => Math.floor(Math.random() * 50) + 30)
+
+        setAudioData((prevData) => {
+          const newData = [...prevData, ...randomData]
+          return newData.slice(-60)
+        })
+      }, 1000)
+
+      return () => clearInterval(interval)
+    }
+  }, [isCapturing, socket])
 
   return (
-    <>
+    <div className="min-h-screen bg-gray-50">
       <Head>
         <title>Dashboard - PneuScope</title>
+        <meta name="description" content="PneuScope dashboard for patient monitoring" />
+        <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome, Dr. {user?.name || "User"}</h1>
-          <p className="text-gray-600">Monitor patients and analyze chest audio data</p>
-        </div>
+      <Navbar />
 
-        {/* Tab Navigation */}
-        <div className="border-b border-gray-200 mb-8">
-          <nav className="-mb-px flex space-x-8">
-            <button
-              onClick={() => setActiveTab("monitor")}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "monitor"
-                  ? "border-medical-500 text-medical-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              <Activity className="w-4 h-4 inline mr-2" />
-              Monitor
-            </button>
-            <button
-              onClick={() => setActiveTab("patients")}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "patients"
-                  ? "border-medical-500 text-medical-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              <Users className="w-4 h-4 inline mr-2" />
-              Patients
-            </button>
-          </nav>
-        </div>
+      <main className="container mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold text-primary-700 mb-6">Dashboard</h1>
 
-        {/* Monitor Tab */}
-        {activeTab === "monitor" && (
-          <div className="space-y-8">
-            {/* Patient Selection */}
-            <div className="card">
-              <h2 className="text-xl font-semibold mb-4">Select Patient</h2>
-              <select
-                className="input-field"
-                value={selectedPatient?._id || ""}
-                onChange={(e) => {
-                  const patient = patients.find((p) => p._id === e.target.value)
-                  setSelectedPatient(patient || null)
-                }}
-              >
-                <option value="">Choose a patient...</option>
-                {patients.map((patient) => (
-                  <option key={patient._id} value={patient._id}>
-                    {patient.name} - {new Date(patient.dateOfBirth).toLocaleDateString()}
-                  </option>
-                ))}
-              </select>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left sidebar - Patient list */}
+          <div className="bg-white rounded-lg shadow-md p-4">
+            <h2 className="text-xl font-semibold text-primary-700 mb-4">Patients</h2>
+
+            {isLoading ? (
+              <p>Loading patients...</p>
+            ) : error ? (
+              <p className="text-red-500">{error}</p>
+            ) : (
+              <>
+                <div className="mb-4">
+                  <button
+                    onClick={() => setSelectedPatient(null)}
+                    className="w-full bg-primary-600 text-white py-2 px-4 rounded-md hover:bg-primary-700 transition"
+                  >
+                    Add New Patient
+                  </button>
+                </div>
+
+                {patients.length === 0 ? (
+                  <p>No patients found. Add your first patient.</p>
+                ) : (
+                  <ul className="divide-y divide-gray-200">
+                    {patients.map((patient) => (
+                      <li key={patient._id} className="py-2">
+                        <button
+                          onClick={() => handlePatientSelect(patient)}
+                          className={`w-full text-left px-3 py-2 rounded-md ${
+                            selectedPatient?._id === patient._id
+                              ? "bg-primary-100 text-primary-700"
+                              : "hover:bg-gray-100"
+                          }`}
+                        >
+                          <div className="font-medium">{patient.name}</div>
+                          <div className="text-sm text-gray-500">DOB: {new Date(patient.dob).toLocaleDateString()}</div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Main content - Patient form and audio capture */}
+          <div className="lg:col-span-2">
+            {/* Patient form */}
+            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+              <h2 className="text-xl font-semibold text-primary-700 mb-4">
+                {selectedPatient ? "Edit Patient" : "Add New Patient"}
+              </h2>
+
+              <PatientForm
+                patient={selectedPatient}
+                onSubmit={handlePatientSubmit}
+                onDelete={selectedPatient ? () => handleDeletePatient(selectedPatient._id) : undefined}
+              />
             </div>
 
-            {/* Audio Capture Controls */}
-            <div className="card">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold">Audio Capture</h2>
-                <div className="space-x-4">
+            {/* Audio capture and analysis */}
+            {selectedPatient && (
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <h2 className="text-xl font-semibold text-primary-700 mb-4">Audio Capture & Analysis</h2>
+
+                <div className="flex flex-wrap gap-4 mb-6">
                   <button
                     onClick={startCapture}
-                    disabled={!selectedPatient || isCapturing}
-                    className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isCapturing}
+                    className={`px-4 py-2 rounded-md ${
+                      isCapturing ? "bg-gray-300 cursor-not-allowed" : "bg-green-600 text-white hover:bg-green-700"
+                    }`}
                   >
-                    <Play className="w-4 h-4 inline mr-2" />
                     Start Capture
                   </button>
+
                   <button
                     onClick={stopCapture}
                     disabled={!isCapturing}
-                    className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={`px-4 py-2 rounded-md ${
+                      !isCapturing ? "bg-gray-300 cursor-not-allowed" : "bg-red-600 text-white hover:bg-red-700"
+                    }`}
                   >
-                    <Square className="w-4 h-4 inline mr-2" />
                     Stop Capture
                   </button>
                 </div>
-              </div>
 
-              {isCapturing && (
-                <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-                  🔴 Recording chest audio... ({audioData.length} data points collected)
-                </div>
-              )}
-            </div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2">
+                    <h3 className="text-lg font-medium mb-2">Live Audio Data</h3>
+                    <LiveChart data={audioData} />
+                  </div>
 
-            {/* Live Chart and Risk Gauge */}
-            <div className="grid lg:grid-cols-2 gap-8">
-              <div className="card">
-                <h3 className="text-lg font-semibold mb-4">Live Audio Data (dB)</h3>
-                <LiveChart data={audioData} />
-              </div>
-
-              {riskScore !== null && (
-                <div className="card">
-                  <h3 className="text-lg font-semibold mb-4">Risk Assessment</h3>
-                  <RiskGauge score={riskScore} />
-                  <div className="mt-4 p-4 bg-gray-50 rounded">
-                    <p className="text-sm text-gray-600">
-                      <strong>Risk Score:</strong> {(riskScore * 100).toFixed(1)}%
-                    </p>
-                    <p className="text-sm text-gray-600 mt-2">
-                      {riskScore < 0.3
-                        ? "✅ Low risk detected"
-                        : riskScore < 0.7
-                          ? "⚠️ Moderate risk - monitor closely"
-                          : "🚨 High risk - immediate attention recommended"}
-                    </p>
+                  <div>
+                    <h3 className="text-lg font-medium mb-2">Risk Assessment</h3>
+                    <RiskGauge score={riskScore} />
                   </div>
                 </div>
-              )}
-            </div>
-            {/* System Status */}
-            {activeTab === "monitor" && (
-              <div className="mt-8">
-                <SystemStatus />
               </div>
             )}
           </div>
-        )}
-
-        {/* Patients Tab */}
-        {activeTab === "patients" && (
-          <div className="grid lg:grid-cols-2 gap-8">
-            <div className="card">
-              <h2 className="text-xl font-semibold mb-4">Add New Patient</h2>
-              <PatientForm onSuccess={loadPatients} />
-            </div>
-            <div className="card">
-              <h2 className="text-xl font-semibold mb-4">Patient List</h2>
-              <PatientList patients={patients} onUpdate={loadPatients} />
-            </div>
-          </div>
-        )}
-      </div>
-    </>
+        </div>
+      </main>
+    </div>
   )
 }
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
-  // Simple auth check - in production, verify JWT token
-  const { req } = context
-  const token = req.cookies.token
+  try {
+    // Get the token from cookies
+    const { req } = context
 
-  if (!token) {
+    // Call the API to verify the token and get user data
+    const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/auth/verify`, {
+      headers: {
+        Cookie: req.headers.cookie || "",
+      },
+    })
+
+    // If the user is authenticated, return the user data
+    return {
+      props: {
+        user: response.data.user,
+      },
+    }
+  } catch (error) {
+    // If the user is not authenticated, redirect to login
     return {
       redirect: {
         destination: "/login",
@@ -261,8 +345,6 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       },
     }
   }
-
-  return {
-    props: {},
-  }
 }
+
+export default Dashboard

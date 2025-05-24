@@ -1,122 +1,178 @@
 import express from "express"
-import { body, validationResult } from "express-validator"
-import Patient from "../models/Patient"
-import { authMiddleware } from "../middleware/auth"
+import { body } from "express-validator"
+import {
+  getAllPatients,
+  getPatientById,
+  createPatient,
+  updatePatient,
+  deletePatient,
+} from "../controllers/patientController"
+import { protect } from "../middleware/auth"
+import { validateRequest } from "../middleware/validate"
 
 const router = express.Router()
 
 // Apply auth middleware to all routes
-router.use(authMiddleware)
+router.use(protect)
 
-// Get all patients
-router.get("/", async (req, res) => {
-  try {
-    const patients = await Patient.find({ createdBy: req.user.id }).sort({ createdAt: -1 })
-    res.json(patients)
-  } catch (error) {
-    console.error("Get patients error:", error)
-    res.status(500).json({ message: "Server error" })
-  }
-})
+/**
+ * @swagger
+ * /api/patients:
+ *   get:
+ *     summary: Get all patients
+ *     tags: [Patients]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of patients
+ *       401:
+ *         description: Not authenticated
+ */
+router.get("/", getAllPatients)
 
-// Get single patient
-router.get("/:id", async (req, res) => {
-  try {
-    const patient = await Patient.findOne({
-      _id: req.params.id,
-      createdBy: req.user.id,
-    })
+/**
+ * @swagger
+ * /api/patients/{id}:
+ *   get:
+ *     summary: Get patient by ID
+ *     tags: [Patients]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Patient data
+ *       404:
+ *         description: Patient not found
+ */
+router.get("/:id", getPatientById)
 
-    if (!patient) {
-      return res.status(404).json({ message: "Patient not found" })
-    }
-
-    res.json(patient)
-  } catch (error) {
-    console.error("Get patient error:", error)
-    res.status(500).json({ message: "Server error" })
-  }
-})
-
-// Create patient
+/**
+ * @swagger
+ * /api/patients:
+ *   post:
+ *     summary: Create a new patient
+ *     tags: [Patients]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - dob
+ *             properties:
+ *               name:
+ *                 type: string
+ *               dob:
+ *                 type: string
+ *                 format: date
+ *               allergies:
+ *                 type: string
+ *               medicalHistory:
+ *                 type: string
+ *               parentEmail:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Patient created successfully
+ *       400:
+ *         description: Invalid input
+ */
 router.post(
   "/",
   [
-    body("name").trim().isLength({ min: 2 }),
-    body("dateOfBirth").isISO8601(),
+    body("name").trim().isLength({ min: 2, max: 50 }).withMessage("Name must be between 2 and 50 characters"),
+    body("dob").isISO8601().toDate().withMessage("Please provide a valid date of birth"),
     body("allergies").optional().trim(),
     body("medicalHistory").optional().trim(),
+    body("parentEmail").optional().isEmail().withMessage("Please provide a valid parent email"),
+    validateRequest,
   ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req)
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() })
-      }
-
-      const patient = new Patient({
-        ...req.body,
-        createdBy: req.user.id,
-      })
-
-      await patient.save()
-      res.status(201).json(patient)
-    } catch (error) {
-      console.error("Create patient error:", error)
-      res.status(500).json({ message: "Server error" })
-    }
-  },
+  createPatient,
 )
 
-// Update patient
+/**
+ * @swagger
+ * /api/patients/{id}:
+ *   put:
+ *     summary: Update a patient
+ *     tags: [Patients]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               dob:
+ *                 type: string
+ *                 format: date
+ *               allergies:
+ *                 type: string
+ *               medicalHistory:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Patient updated successfully
+ *       404:
+ *         description: Patient not found
+ */
 router.put(
   "/:id",
   [
-    body("name").optional().trim().isLength({ min: 2 }),
-    body("dateOfBirth").optional().isISO8601(),
+    body("name")
+      .optional()
+      .trim()
+      .isLength({ min: 2, max: 50 })
+      .withMessage("Name must be between 2 and 50 characters"),
+    body("dob").optional().isISO8601().toDate().withMessage("Please provide a valid date of birth"),
     body("allergies").optional().trim(),
     body("medicalHistory").optional().trim(),
+    validateRequest,
   ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req)
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() })
-      }
-
-      const patient = await Patient.findOneAndUpdate({ _id: req.params.id, createdBy: req.user.id }, req.body, {
-        new: true,
-      })
-
-      if (!patient) {
-        return res.status(404).json({ message: "Patient not found" })
-      }
-
-      res.json(patient)
-    } catch (error) {
-      console.error("Update patient error:", error)
-      res.status(500).json({ message: "Server error" })
-    }
-  },
+  updatePatient,
 )
 
-// Delete patient
-router.delete("/:id", async (req, res) => {
-  try {
-    const patient = await Patient.findOneAndDelete({
-      _id: req.params.id,
-      createdBy: req.user.id,
-    })
-
-    if (!patient) {
-      return res.status(404).json({ message: "Patient not found" })
-    }
-
-    res.json({ message: "Patient deleted successfully" })
-  } catch (error) {
-    console.error("Delete patient error:", error)
-    res.status(500).json({ message: "Server error" })
-  }
-})
+/**
+ * @swagger
+ * /api/patients/{id}:
+ *   delete:
+ *     summary: Delete a patient
+ *     tags: [Patients]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Patient deleted successfully
+ *       404:
+ *         description: Patient not found
+ */
+router.delete("/:id", deletePatient)
 
 export default router

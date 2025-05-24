@@ -1,122 +1,95 @@
 import User from "../models/User"
 import Patient from "../models/Patient"
 
-export async function seedDatabase() {
+export const seedDatabase = async (): Promise<void> => {
   try {
     // Check if admin user exists
     const adminExists = await User.findOne({ email: "admin@pneuscope.com" })
 
     if (!adminExists) {
+      console.log("Seeding admin user...")
+
       // Create admin user
-      const admin = new User({
+      const admin = await User.create({
         name: "Admin User",
         email: "admin@pneuscope.com",
-        password: "admin123",
+        password: "password123",
         role: "admin",
       })
-      await admin.save()
-      console.log("✅ Admin user created")
+
+      console.log("Admin user created:", admin.email)
     }
 
     // Check if doctor user exists
-    const doctorExists = await User.findOne({ email: "doctor@pneuscope.com" })
-    let doctorId = doctorExists?._id
+    const doctorExists = await User.findOne({ email: "doctor@example.com" })
 
     if (!doctorExists) {
-      // Create doctor user with hospital affiliation
-      const doctor = new User({
-        name: "Dr. Sarah Johnson",
-        email: "doctor@pneuscope.com",
-        password: "doctor123",
+      console.log("Seeding doctor user...")
+
+      // Create doctor user
+      const doctor = await User.create({
+        name: "Dr. John Smith",
+        email: "doctor@example.com",
+        password: "password123",
         role: "doctor",
-        hospitalAffiliation: "Children's Hospital of Philadelphia",
-        specialization: "Pediatric Pulmonology",
-        licenseNumber: "MD123456",
-        phoneNumber: "+1234567890",
       })
-      await doctor.save()
-      doctorId = doctor._id
-      console.log("✅ Doctor user created")
-    }
 
-    // Create additional sample doctors
-    const sampleDoctors = [
-      {
-        name: "Dr. Michael Chen",
-        email: "mchen@bostonchildrens.org",
-        password: "doctor123",
-        role: "doctor",
-        hospitalAffiliation: "Boston Children's Hospital",
-        specialization: "Pediatric Emergency Medicine",
-        licenseNumber: "MD789012",
-        phoneNumber: "+1987654321",
-      },
-      {
-        name: "Dr. Emily Rodriguez",
-        email: "erodriguez@texaschildrens.org",
-        password: "doctor123",
-        role: "doctor",
-        hospitalAffiliation: "Texas Children's Hospital",
-        specialization: "Neonatology",
-        licenseNumber: "MD345678",
-        phoneNumber: "+1555123456",
-      },
-      {
-        name: "Dr. James Wilson",
-        email: "jwilson@seattlechildrens.org",
-        password: "doctor123",
-        role: "doctor",
-        hospitalAffiliation: "Seattle Children's Hospital",
-        specialization: "Pediatric Critical Care",
-        licenseNumber: "MD901234",
-        phoneNumber: "+1444987654",
-      },
-    ]
+      console.log("Doctor user created:", doctor.email)
 
-    for (const doctorData of sampleDoctors) {
-      const existingDoctor = await User.findOne({ email: doctorData.email })
-      if (!existingDoctor) {
-        const doctor = new User(doctorData)
-        await doctor.save()
-        console.log(`✅ Sample doctor created: ${doctorData.name}`)
+      // Create sample patients
+      const patientCount = await Patient.countDocuments()
+
+      if (patientCount === 0) {
+        console.log("Seeding sample patients...")
+
+        const patients = [
+          {
+            name: "Emma Johnson",
+            dob: new Date("2020-05-15"),
+            allergies: "Peanuts, Penicillin",
+            medicalHistory: "Asthma, Eczema",
+            createdBy: doctor._id,
+          },
+          {
+            name: "Liam Williams",
+            dob: new Date("2021-02-10"),
+            allergies: "None",
+            medicalHistory: "Premature birth at 35 weeks",
+            createdBy: doctor._id,
+          },
+          {
+            name: "Olivia Brown",
+            dob: new Date("2019-11-22"),
+            allergies: "Dairy",
+            medicalHistory: "Recurrent ear infections",
+            createdBy: doctor._id,
+          },
+        ]
+
+        await Patient.insertMany(patients)
+        console.log(`${patients.length} sample patients created`)
       }
     }
 
-    // Check if sample patients exist
-    const patientCount = await Patient.countDocuments()
+    // Check if parent user exists
+    const parentExists = await User.findOne({ email: "parent@example.com" })
 
-    if (patientCount === 0 && doctorId) {
-      // Create sample patients
-      const samplePatients = [
-        {
-          name: "Emma Thompson",
-          dateOfBirth: new Date("2022-03-15"),
-          allergies: "Penicillin",
-          medicalHistory: "Previous respiratory infection at 8 months",
-          createdBy: doctorId,
-        },
-        {
-          name: "Liam Rodriguez",
-          dateOfBirth: new Date("2021-11-22"),
-          allergies: "",
-          medicalHistory: "Premature birth, monitored for respiratory issues",
-          createdBy: doctorId,
-        },
-        {
-          name: "Sophia Chen",
-          dateOfBirth: new Date("2022-07-08"),
-          allergies: "Dairy, Eggs",
-          medicalHistory: "Family history of asthma",
-          createdBy: doctorId,
-        },
-      ]
+    if (!parentExists) {
+      console.log("Seeding parent user...")
 
-      await Patient.insertMany(samplePatients)
-      console.log("✅ Sample patients created")
+      // Create parent user
+      const parent = await User.create({
+        name: "Sarah Johnson",
+        email: "parent@example.com",
+        password: "password123",
+        role: "parent",
+      })
+
+      console.log("Parent user created:", parent.email)
     }
 
-    console.log("🌱 Database seeding completed")
+    console.log("Database seeding completed")
   } catch (error) {
-    console.error("❌ Database seeding error:", error)
+    console.error("Database seeding error:", error)
   }
 }

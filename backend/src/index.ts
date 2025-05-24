@@ -1,65 +1,118 @@
 import express from "express"
-import { createServer } from "http"
-import { Server } from "socket.io"
+import http from "http"
+import { Server as SocketIOServer } from "socket.io"
+import mongoose from "mongoose"
 import cors from "cors"
 import helmet from "helmet"
+import morgan from "morgan"
 import cookieParser from "cookie-parser"
-import mongoose from "mongoose"
 import dotenv from "dotenv"
+import swaggerJsDoc from "swagger-jsdoc"
+import swaggerUi from "swagger-ui-express"
 
-import authRoutes from "./routes/auth"
-import patientRoutes from "./routes/patients"
-import adminRoutes from "./routes/admin"
-import { setupSocketHandlers } from "./socket/handlers"
-import { seedDatabase } from "./utils/seedData"
-
+// Load environment variables
 dotenv.config()
 
+// Import routes
+import authRoutes from "./routes/auth"
+import patientRoutes from "./routes/patients"
+import mlRoutes from "./routes/ml"
+
+// Import socket handler
+import setupSocketIO from "./socket"
+
+// Import seed data function
+import { seedDatabase } from "./utils/seedData"
+
+// Create Express app
 const app = express()
-const server = createServer(app)
-const io = new Server(server, {
+const server = http.createServer(app)
+
+// Set up Socket.IO
+const io = new SocketIOServer(server, {
   cors: {
     origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+    methods: ["GET", "POST"],
     credentials: true,
   },
 })
 
-// Middleware
+// Set up middleware
+app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
+app.use(cookieParser())
 app.use(helmet())
+app.use(morgan("dev"))
 app.use(
   cors({
     origin: process.env.CORS_ORIGIN || "http://localhost:3000",
     credentials: true,
   }),
 )
-app.use(express.json())
-app.use(cookieParser())
 
-// Routes
+// Set up Swagger documentation
+const swaggerOptions = {
+  definition: {
+    openapi: "3.0.0",
+    info: {
+      title: "PneuScope API",
+      version: "1.0.0",
+      description: "API documentation for PneuScope application",
+    },
+    servers: [
+      {
+        url: `http://localhost:${process.env.PORT || 4000}`,
+        description: "Development server",
+      },
+    ],
+  },
+  apis: ["./src/routes/*.ts"],
+}
+
+const swaggerDocs = swaggerJsDoc(swaggerOptions)
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs))
+
+// Set up routes
 app.use("/api/auth", authRoutes)
 app.use("/api/patients", patientRoutes)
-app.use("/api/admin", adminRoutes)
+app.use("/api", mlRoutes)
 
-// Health check
+// Health check endpoint
 app.get("/health", (req, res) => {
-  res.json({ status: "OK", timestamp: new Date().toISOString() })
+  res.status(200).json({ status: "ok" })
 })
 
-// Socket.io setup
-setupSocketHandlers(io)
+// Set up Socket.IO handler
+setupSocketIO(io)
 
-// Database connection
+// Connect to MongoDB
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/pneuscope"
+
 mongoose
-  .connect(process.env.MONGODB_URI || "mongodb://localhost:27017/pneuscope")
-  .then(async () => {
-    console.log("✅ Connected to MongoDB")
-    await seedDatabase()
+  .connect(MONGODB_URI)
+  .then(() => {
+    console.log("Connected to MongoDB")
+
+    // Seed database with initial data if needed
+    if (process.env.NODE_ENV === "development") {
+      seedDatabase()
+    }
+
+    // Start server
+    const PORT = process.env.PORT || 4000
+    server.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`)
+      console.log(`API documentation available at http://localhost:${PORT}/api-docs`)
+    })
   })
-  .catch((err) => console.error("❌ MongoDB connection error:", err))
+  .catch((error) => {
+    console.error("Failed to connect to MongoDB:", error)
+    process.exit(1)
+  })
 
-const PORT = process.env.PORT || 5000
-
-server.listen(PORT, () => {
-  console.log(`🚀 PneuScope Backend running on port ${PORT}`)
-  console.log(`📊 Socket.io server ready for real-time connections`)
+// Handle unhandled promise rejections
+process.on("unhandledRejection", (err) => {
+  console.error("Unhandled Promise Rejection:", err)
+  // Close server & exit process
+  server.close(() => process.exit(1))
 })

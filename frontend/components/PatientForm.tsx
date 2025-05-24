@@ -1,126 +1,139 @@
 "use client"
 
-import type React from "react"
-
 import { useState } from "react"
-import * as yup from "yup"
+import { Formik, Form, Field, ErrorMessage } from "formik"
+import * as Yup from "yup"
 
-const patientSchema = yup.object({
-  name: yup.string().required("Name is required"),
-  dateOfBirth: yup.date().required("Date of birth is required"),
-  allergies: yup.string(),
-  medicalHistory: yup.string(),
-})
-
-interface PatientFormProps {
-  onSuccess: () => void
+interface Patient {
+  _id: string
+  name: string
+  dob: string
+  allergies: string
+  medicalHistory: string
 }
 
-export default function PatientForm({ onSuccess }: PatientFormProps) {
-  const [formData, setFormData] = useState({
-    name: "",
-    dateOfBirth: "",
-    allergies: "",
-    medicalHistory: "",
-  })
-  const [loading, setLoading] = useState(false)
-  const [errors, setErrors] = useState<Record<string, string>>({})
+interface PatientFormProps {
+  patient: Patient | null
+  onSubmit: (values: Omit<Patient, "_id">) => void
+  onDelete?: () => void
+}
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setErrors({})
+// Validation schema
+const PatientSchema = Yup.object().shape({
+  name: Yup.string().required("Name is required").min(2, "Name must be at least 2 characters"),
+  dob: Yup.date().required("Date of birth is required").max(new Date(), "Date of birth cannot be in the future"),
+  allergies: Yup.string(),
+  medicalHistory: Yup.string(),
+})
 
+function PatientForm({ patient, onSubmit, onDelete }: PatientFormProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const initialValues = {
+    name: patient?.name || "",
+    dob: patient?.dob ? new Date(patient.dob).toISOString().split("T")[0] : "",
+    allergies: patient?.allergies || "",
+    medicalHistory: patient?.medicalHistory || "",
+  }
+
+  const handleSubmit = async (values: Omit<Patient, "_id">) => {
+    setIsSubmitting(true)
     try {
-      await patientSchema.validate(formData, { abortEarly: false })
-
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/patients`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(formData),
-      })
-
-      if (response.ok) {
-        setFormData({ name: "", dateOfBirth: "", allergies: "", medicalHistory: "" })
-        onSuccess()
-      } else {
-        throw new Error("Failed to create patient")
-      }
-    } catch (error) {
-      if (error instanceof yup.ValidationError) {
-        const validationErrors: Record<string, string> = {}
-        error.inner.forEach((err) => {
-          if (err.path) validationErrors[err.path] = err.message
-        })
-        setErrors(validationErrors)
-      }
+      await onSubmit(values)
     } finally {
-      setLoading(false)
+      setIsSubmitting(false)
     }
   }
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }))
-  }
-
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Patient Name *</label>
-        <input
-          type="text"
-          name="name"
-          value={formData.name}
-          onChange={handleChange}
-          className="input-field"
-          placeholder="Enter patient name"
-        />
-        {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
-      </div>
+    <Formik initialValues={initialValues} validationSchema={PatientSchema} onSubmit={handleSubmit} enableReinitialize>
+      {({ isValid, dirty }) => (
+        <Form>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label htmlFor="name" className="block text-gray-700 font-medium mb-2">
+                Full Name
+              </label>
+              <Field
+                type="text"
+                name="name"
+                id="name"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                placeholder="Enter patient's full name"
+              />
+              <ErrorMessage name="name" component="div" className="mt-1 text-red-500 text-sm" />
+            </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth *</label>
-        <input
-          type="date"
-          name="dateOfBirth"
-          value={formData.dateOfBirth}
-          onChange={handleChange}
-          className="input-field"
-        />
-        {errors.dateOfBirth && <p className="text-red-500 text-xs mt-1">{errors.dateOfBirth}</p>}
-      </div>
+            <div>
+              <label htmlFor="dob" className="block text-gray-700 font-medium mb-2">
+                Date of Birth
+              </label>
+              <Field
+                type="date"
+                name="dob"
+                id="dob"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <ErrorMessage name="dob" component="div" className="mt-1 text-red-500 text-sm" />
+            </div>
+          </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Known Allergies</label>
-        <textarea
-          name="allergies"
-          value={formData.allergies}
-          onChange={handleChange}
-          className="input-field"
-          rows={2}
-          placeholder="List any known allergies"
-        />
-      </div>
+          <div className="mb-4">
+            <label htmlFor="allergies" className="block text-gray-700 font-medium mb-2">
+              Allergies
+            </label>
+            <Field
+              type="text"
+              name="allergies"
+              id="allergies"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+              placeholder="Enter allergies (if any)"
+            />
+            <ErrorMessage name="allergies" component="div" className="mt-1 text-red-500 text-sm" />
+          </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Medical History</label>
-        <textarea
-          name="medicalHistory"
-          value={formData.medicalHistory}
-          onChange={handleChange}
-          className="input-field"
-          rows={3}
-          placeholder="Relevant medical history"
-        />
-      </div>
+          <div className="mb-6">
+            <label htmlFor="medicalHistory" className="block text-gray-700 font-medium mb-2">
+              Medical History
+            </label>
+            <Field
+              as="textarea"
+              name="medicalHistory"
+              id="medicalHistory"
+              rows={4}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+              placeholder="Enter relevant medical history"
+            />
+            <ErrorMessage name="medicalHistory" component="div" className="mt-1 text-red-500 text-sm" />
+          </div>
 
-      <button type="submit" disabled={loading} className="w-full btn-primary disabled:opacity-50">
-        {loading ? "Adding Patient..." : "Add Patient"}
-      </button>
-    </form>
+          <div className="flex flex-wrap justify-between gap-4">
+            <button
+              type="submit"
+              disabled={isSubmitting || !(isValid && dirty)}
+              className={`px-6 py-2 rounded-md ${
+                isValid && dirty
+                  ? "bg-primary-600 text-white hover:bg-primary-700"
+                  : "bg-gray-300 text-gray-500 cursor-not-allowed"
+              }`}
+            >
+              {isSubmitting ? "Saving..." : patient ? "Update Patient" : "Add Patient"}
+            </button>
+
+            {onDelete && (
+              <button
+                type="button"
+                onClick={onDelete}
+                className="px-6 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+              >
+                Delete Patient
+              </button>
+            )}
+          </div>
+        </Form>
+      )}
+    </Formik>
   )
 }
+
+export default PatientForm

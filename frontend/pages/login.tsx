@@ -1,106 +1,115 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
-import { useRouter } from "next/router"
+import type { NextPage } from "next"
 import Head from "next/head"
-import Link from "next/link"
-import { useAuth } from "@/contexts/AuthContext"
+import { useRouter } from "next/router"
+import { useState } from "react"
+import { Formik, Form, Field, ErrorMessage } from "formik"
+import * as Yup from "yup"
+import axios from "axios"
+import Navbar from "../components/Navbar"
 
-export default function Login() {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
-  const { login } = useAuth()
+// Validation schema
+const LoginSchema = Yup.object().shape({
+  email: Yup.string().email("Invalid email address").required("Email is required"),
+  password: Yup.string().required("Password is required").min(6, "Password must be at least 6 characters"),
+})
+
+const Login: NextPage = () => {
   const router = useRouter()
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError("")
+  const handleSubmit = async (values: { email: string; password: string }) => {
+    setIsLoading(true)
+    setError(null)
 
     try {
-      await login(email, password)
-      router.push("/dashboard")
-    } catch (err) {
-      setError("Invalid credentials")
+      const response = await axios.post("/api/auth/login", values, {
+        withCredentials: true,
+      })
+
+      if (response.data.success) {
+        // Store user info in localStorage (not the token, which is in HTTP-only cookie)
+        localStorage.setItem("user", JSON.stringify(response.data.user))
+        router.push("/dashboard")
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Login failed. Please try again.")
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
   return (
-    <>
+    <div className="min-h-screen bg-gray-50">
       <Head>
         <title>Login - PneuScope</title>
+        <meta name="description" content="Login to PneuScope dashboard" />
+        <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full space-y-8">
-          <div>
-            <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">Sign in to PneuScope</h2>
-            <p className="mt-2 text-center text-sm text-gray-600">Access your medical dashboard</p>
-          </div>
-          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-            {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">{error}</div>}
-            <div>
-              <label htmlFor="email" className="sr-only">
-                Email address
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                required
-                className="input-field"
-                placeholder="Email address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="sr-only">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                required
-                className="input-field"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            <div>
-              <button type="submit" disabled={loading} className="w-full btn-primary disabled:opacity-50">
-                {loading ? "Signing in..." : "Sign in"}
-              </button>
-            </div>
-            <div className="text-center">
-              <Link href="/register" className="text-medical-600 hover:text-medical-500">
-                Need an account? Register here
-              </Link>
-            </div>
-          </form>
+      <Navbar />
 
-          {/* Demo Credentials */}
-          <div className="mt-8 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-            <h3 className="text-sm font-medium text-yellow-800 mb-2">Demo Credentials:</h3>
-            <div className="text-xs text-yellow-700 space-y-1">
-              <div>
-                <strong>Admin:</strong> admin@pneuscope.com / admin123
-              </div>
-              <div>
-                <strong>Doctor:</strong> doctor@pneuscope.com / doctor123
-              </div>
+      <main className="container mx-auto px-4 py-12">
+        <div className="max-w-md mx-auto bg-white rounded-lg shadow-md overflow-hidden">
+          <div className="px-6 py-8">
+            <h2 className="text-2xl font-bold text-center text-primary-700 mb-6">Login to PneuScope</h2>
+
+            {error && <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">{error}</div>}
+
+            <Formik initialValues={{ email: "", password: "" }} validationSchema={LoginSchema} onSubmit={handleSubmit}>
+              {({ isSubmitting }) => (
+                <Form>
+                  <div className="mb-4">
+                    <label htmlFor="email" className="block text-gray-700 font-medium mb-2">
+                      Email
+                    </label>
+                    <Field
+                      type="email"
+                      name="email"
+                      id="email"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      placeholder="Enter your email"
+                    />
+                    <ErrorMessage name="email" component="div" className="mt-1 text-red-500 text-sm" />
+                  </div>
+
+                  <div className="mb-6">
+                    <label htmlFor="password" className="block text-gray-700 font-medium mb-2">
+                      Password
+                    </label>
+                    <Field
+                      type="password"
+                      name="password"
+                      id="password"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      placeholder="Enter your password"
+                    />
+                    <ErrorMessage name="password" component="div" className="mt-1 text-red-500 text-sm" />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || isLoading}
+                    className="w-full bg-primary-600 text-white py-2 px-4 rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition disabled:opacity-50"
+                  >
+                    {isLoading ? "Logging in..." : "Login"}
+                  </button>
+                </Form>
+              )}
+            </Formik>
+
+            <div className="mt-4 text-center text-sm text-gray-600">
+              <p>Demo Credentials:</p>
+              <p>Admin: admin@pneuscope.com / password123</p>
+              <p>Doctor: doctor@pneuscope.com / password123</p>
             </div>
           </div>
         </div>
-      </div>
-    </>
+      </main>
+    </div>
   )
 }
+
+export default Login

@@ -1,79 +1,59 @@
-"use client"
-
-import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts"
-
 interface RiskGaugeProps {
-  score: number | null
+  score: number // 0-1 range
 }
 
-function RiskGauge({ score }: RiskGaugeProps) {
-  // Define risk levels and colors
-  const riskLevels = [
-    { level: "Low", threshold: 0.3, color: "#22c55e" },
-    { level: "Moderate", threshold: 0.7, color: "#f59e0b" },
-    { level: "High", threshold: 1, color: "#ef4444" },
-  ]
+export default function RiskGauge({ score }: RiskGaugeProps) {
+  const percentage = Math.round(score * 100)
+  const rotation = score * 180 - 90 // Convert to gauge rotation
 
-  // Determine current risk level
   const getRiskLevel = (score: number) => {
-    for (const risk of riskLevels) {
-      if (score <= risk.threshold) {
-        return risk
-      }
-    }
-    return riskLevels[riskLevels.length - 1]
+    if (score < 0.3) return { level: "Low", color: "text-green-600", bgColor: "bg-green-100" }
+    if (score < 0.7) return { level: "Moderate", color: "text-yellow-600", bgColor: "bg-yellow-100" }
+    return { level: "High", color: "text-red-600", bgColor: "bg-red-100" }
   }
 
-  // Get color for current score
-  const getColor = (score: number) => {
-    return getRiskLevel(score).color
-  }
-
-  // Create data for the gauge chart
-  const createGaugeData = (score: number) => {
-    return [
-      { name: "Score", value: score },
-      { name: "Remaining", value: 1 - score },
-    ]
-  }
+  const risk = getRiskLevel(score)
 
   return (
-    <div className="w-full h-64 bg-white p-4 rounded-lg border border-gray-200 flex flex-col items-center justify-center">
-      {score === null ? (
-        <div className="text-gray-500">No risk assessment available. Capture audio data to generate a risk score.</div>
-      ) : (
-        <>
-          <div className="h-40 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={createGaugeData(score)}
-                  cx="50%"
-                  cy="50%"
-                  startAngle={180}
-                  endAngle={0}
-                  innerRadius="60%"
-                  outerRadius="80%"
-                  paddingAngle={0}
-                  dataKey="value"
-                >
-                  <Cell fill={getColor(score)} />
-                  <Cell fill="#e5e7eb" />
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+    <div className="flex flex-col items-center">
+      {/* Gauge */}
+      <div className="relative w-48 h-24 mb-4">
+        <svg viewBox="0 0 200 100" className="w-full h-full">
+          {/* Background arc */}
+          <path d="M 20 80 A 80 80 0 0 1 180 80" fill="none" stroke="#e5e7eb" strokeWidth="8" />
+          {/* Progress arc */}
+          <path
+            d="M 20 80 A 80 80 0 0 1 180 80"
+            fill="none"
+            stroke={score < 0.3 ? "#10b981" : score < 0.7 ? "#f59e0b" : "#ef4444"}
+            strokeWidth="8"
+            strokeDasharray={`${score * 251.2} 251.2`}
+            className="transition-all duration-1000"
+          />
+          {/* Needle */}
+          <line
+            x1="100"
+            y1="80"
+            x2="100"
+            y2="30"
+            stroke="#374151"
+            strokeWidth="2"
+            transform={`rotate(${rotation} 100 80)`}
+            className="transition-transform duration-1000"
+          />
+          {/* Center dot */}
+          <circle cx="100" cy="80" r="4" fill="#374151" />
+        </svg>
 
-          <div className="text-center">
-            <div className="text-3xl font-bold" style={{ color: getColor(score) }}>
-              {(score * 100).toFixed(0)}%
-            </div>
-            <div className="text-gray-600 font-medium">Risk Level: {getRiskLevel(score).level}</div>
-          </div>
-        </>
-      )}
+        {/* Labels */}
+        <div className="absolute bottom-0 left-0 text-xs text-gray-500">0%</div>
+        <div className="absolute bottom-0 right-0 text-xs text-gray-500">100%</div>
+      </div>
+
+      {/* Risk Level Display */}
+      <div className={`px-4 py-2 rounded-full ${risk.bgColor} ${risk.color} font-semibold text-center`}>
+        {risk.level} Risk: {percentage}%
+      </div>
     </div>
   )
 }
-
-export default RiskGauge

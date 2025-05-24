@@ -1,6 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  env: {
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+    NEXT_PUBLIC_ML_API_URL: process.env.NEXT_PUBLIC_ML_API_URL,
+    NEXT_PUBLIC_SOCKET_URL: process.env.NEXT_PUBLIC_SOCKET_URL || process.env.NEXT_PUBLIC_API_URL,
+  },
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -9,24 +14,6 @@ const nextConfig = {
   },
   images: {
     unoptimized: true,
-  },
-  // Pastikan output: 'standalone' tidak digunakan karena dapat menyebabkan masalah dengan CSS
-  // output: 'standalone',
-  async rewrites() {
-    return [
-      {
-        source: "/api/:path*",
-        destination: process.env.NEXT_PUBLIC_API_URL
-          ? `${process.env.NEXT_PUBLIC_API_URL}/api/:path*`
-          : "http://localhost:4000/api/:path*",
-      },
-      {
-        source: "/ml/:path*",
-        destination: process.env.NEXT_PUBLIC_ML_SERVICE_URL
-          ? `${process.env.NEXT_PUBLIC_ML_SERVICE_URL}/ml/:path*`
-          : "http://localhost:5000/:path*",
-      },
-    ]
   },
 }
 

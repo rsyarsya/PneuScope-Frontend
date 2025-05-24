@@ -5,7 +5,12 @@ export interface IUser extends Document {
   name: string
   email: string
   password: string
-  role: "admin" | "doctor"
+  role: "admin" | "doctor" | "guest"
+  hospitalAffiliation?: string
+  licenseNumber?: string
+  specialization?: string
+  phoneNumber?: string
+  isActive: boolean
   createdAt: Date
   updatedAt: Date
   comparePassword(candidatePassword: string): Promise<boolean>
@@ -15,32 +20,56 @@ const UserSchema = new Schema<IUser>(
   {
     name: {
       type: String,
-      required: [true, "Please provide a name"],
+      required: true,
       trim: true,
-      minlength: [2, "Name must be at least 2 characters long"],
-      maxlength: [50, "Name cannot be more than 50 characters long"],
+      minlength: 2,
+      maxlength: 100,
     },
     email: {
       type: String,
-      required: [true, "Please provide an email"],
+      required: true,
       unique: true,
-      trim: true,
       lowercase: true,
-      match: [
-        /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/,
-        "Please provide a valid email",
-      ],
+      trim: true,
+      match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, "Please enter a valid email"],
     },
     password: {
       type: String,
-      required: [true, "Please provide a password"],
-      minlength: [6, "Password must be at least 6 characters long"],
-      select: false,
+      required: true,
+      minlength: 6,
     },
     role: {
       type: String,
-      enum: ["admin", "doctor"],
+      enum: ["admin", "doctor", "guest"],
       default: "doctor",
+    },
+    hospitalAffiliation: {
+      type: String,
+      required: function () {
+        return this.role === "doctor"
+      },
+      trim: true,
+      maxlength: 200,
+    },
+    licenseNumber: {
+      type: String,
+      trim: true,
+      maxlength: 50,
+      sparse: true, // Allows multiple null values but unique non-null values
+    },
+    specialization: {
+      type: String,
+      trim: true,
+      maxlength: 100,
+    },
+    phoneNumber: {
+      type: String,
+      trim: true,
+      match: [/^[+]?[1-9][\d]{0,15}$/, "Please enter a valid phone number"],
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
     },
   },
   {
@@ -50,16 +79,14 @@ const UserSchema = new Schema<IUser>(
 
 // Hash password before saving
 UserSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) {
-    return next()
-  }
+  if (!this.isModified("password")) return next()
 
   try {
     const salt = await bcrypt.genSalt(10)
     this.password = await bcrypt.hash(this.password, salt)
     next()
-  } catch (error: any) {
-    next(error)
+  } catch (error) {
+    next(error as Error)
   }
 })
 
@@ -67,5 +94,10 @@ UserSchema.pre("save", async function (next) {
 UserSchema.methods.comparePassword = async function (candidatePassword: string): Promise<boolean> {
   return bcrypt.compare(candidatePassword, this.password)
 }
+
+// Index for efficient queries
+UserSchema.index({ hospitalAffiliation: 1 })
+UserSchema.index({ role: 1, hospitalAffiliation: 1 })
+UserSchema.index({ email: 1 }, { unique: true })
 
 export default mongoose.model<IUser>("User", UserSchema)

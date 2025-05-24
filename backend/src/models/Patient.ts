@@ -2,9 +2,9 @@ import mongoose, { type Document, Schema } from "mongoose"
 
 export interface IPatient extends Document {
   name: string
-  dob: Date
-  allergies: string
-  medicalHistory: string
+  dateOfBirth: Date
+  allergies?: string
+  medicalHistory?: string
   createdBy: mongoose.Types.ObjectId
   createdAt: Date
   updatedAt: Date
@@ -14,27 +14,25 @@ const PatientSchema = new Schema<IPatient>(
   {
     name: {
       type: String,
-      required: [true, "Please provide a name"],
+      required: true,
       trim: true,
-      minlength: [2, "Name must be at least 2 characters long"],
-      maxlength: [50, "Name cannot be more than 50 characters long"],
     },
-    dob: {
+    dateOfBirth: {
       type: Date,
-      required: [true, "Please provide a date of birth"],
+      required: true,
     },
     allergies: {
       type: String,
-      default: "",
+      trim: true,
     },
     medicalHistory: {
       type: String,
-      default: "",
+      trim: true,
     },
     createdBy: {
       type: Schema.Types.ObjectId,
       ref: "User",
-      required: [true, "Please provide a user ID"],
+      required: true,
     },
   },
   {

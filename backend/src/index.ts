@@ -41,7 +41,6 @@ const io = new SocketIOServer(server, {
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 app.use(cookieParser())
-app.use(helmet())
 app.use(morgan("dev"))
 app.use(
   cors({

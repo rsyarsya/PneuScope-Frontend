@@ -1,191 +1,78 @@
-import type { Request, Response } from "express"
-import jwt from "jsonwebtoken"
-import User, { type IUser } from "../models/User"
+import { Request, Response } from 'express';
+import User, { IUser } from '../models/user';
+import { generateToken } from '../utils/jwt';
+import { hashPassword, validatePassword } from '../utils/password';
+import mongoose from 'mongoose';
 
-// Generate JWT token
-const generateToken = (user: IUser): string => {
-  return jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET || "your_jwt_secret_key", {
-    expiresIn: process.env.JWT_EXPIRES_IN || "7d",
-  })
+// Pastikan koneksi database diatur dengan benar
+if (!mongoose.connection.readyState) {
+  mongoose.connect(process.env.MONGODB_URI, { dbName: 'PneuScope' })
+    .then(() => console.log('MongoDB connected'))
+    .catch((err) => console.error('MongoDB connection error:', err));
 }
 
-// Set JWT cookie
-const sendTokenCookie = (res: Response, token: string): void => {
-  const cookieOptions = {
-    expires: new Date(Date.now() + Number.parseInt(process.env.JWT_COOKIE_EXPIRES_IN || "7") * 24 * 60 * 60 * 1000),
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-  }
-
-  res.cookie("token", token, cookieOptions)
-}
-
-// Register a new user
-export const register = async (req: Request, res: Response): Promise<void> => {
+export const register = async (req: Request, res: Response) => {
   try {
-    const { name, email, password, role } = req.body
+    console.log('Register request body:', req.body);
+    const { email: rawEmail, password, name, role } = req.body;
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ email })
+    // Normalisasi email menjadi huruf kecil
+    const email = rawEmail.toLowerCase();
+    console.log('Normalized email:', email);
+
+    // Periksa apakah email sudah ada
+    const existingUser = await User.findOne({ email });
+    console.log('Existing user:', existingUser ? 'Yes' : 'No');
     if (existingUser) {
-      res.status(400).json({
-        success: false,
-        message: "User with this email already exists",
-      })
-      return
+      return res.status(400).json({ message: 'Email already exists' });
     }
 
-    // Create new user
-    const user = await User.create({
-      name,
-      email,
-      password,
-      role: role || "doctor", // Default to doctor role
-    })
+    // Hash kata sandi sebelum menyimpan
+    const hashedPassword = await hashPassword(password);
+    console.log('Hashed password:', hashedPassword);
 
-    // Remove password from response
-    user.password = ""
+    // Buat user baru
+    const user = new User({ email, password: hashedPassword, name, role });
+    await user.save();
+    console.log('User saved:', await User.findOne({ email }));
 
-    res.status(201).json({
-      success: true,
-      message: "User registered successfully",
-      user,
-    })
+    // Buat token JWT
+    const token = generateToken(user);
+    res.status(201).json({ token });
   } catch (error) {
-    console.error("Registration error:", error)
-    res.status(500).json({
-      success: false,
-      message: "Failed to register user",
-    })
+    console.error('Registration error:', error);
+    res.status(500).json({ message: 'Registration failed', error: error.message });
   }
-}
+};
 
-// Login user
-export const login = async (req: Request, res: Response): Promise<void> => {
+export const login = async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body
+    console.log('Login request body:', req.body);
+    const { email: rawEmail, password } = req.body;
 
-    // Check if user exists
-    const user = await User.findOne({ email }).select("+password")
+    // Normalisasi email menjadi huruf kecil
+    const email = rawEmail.toLowerCase();
+    console.log('Normalized email:', email);
+
+    // Cari user berdasarkan email
+    const user = await User.findOne({ email });
+    console.log('User found:', user ? user.email : 'No user');
     if (!user) {
-      res.status(401).json({
-        success: false,
-        message: "Invalid credentials",
-      })
-      return
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    // Check if password is correct
-    const isPasswordValid = await user.comparePassword(password)
-    if (!isPasswordValid) {
-      res.status(401).json({
-        success: false,
-        message: "Invalid credentials",
-      })
-      return
+    // Validasi kata sandi
+    const isMatch = await validatePassword(password, user.password);
+    console.log('Password match:', isMatch);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    // Generate token
-    const token = generateToken(user)
-
-    // Set token cookie
-    sendTokenCookie(res, token)
-
-    // Remove password from response
-    user.password = ""
-
-    res.status(200).json({
-      success: true,
-      message: "Login successful",
-      user,
-    })
+    // Buat token JWT
+    const token = generateToken(user);
+    res.json({ token });
   } catch (error) {
-    console.error("Login error:", error)
-    res.status(500).json({
-      success: false,
-      message: "Failed to login",
-    })
+    console.error('Login error:', error);
+    res.status(500).json({ message: 'Login failed', error: error.message });
   }
-}
-
-// Logout user
-export const logout = (req: Request, res: Response): void => {
-  res.cookie("token", "none", {
-    expires: new Date(Date.now() + 10 * 1000),
-    httpOnly: true,
-  })
-
-  res.status(200).json({
-    success: true,
-    message: "Logged out successfully",
-  })
-}
-
-// Get current user
-export const getCurrentUser = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const user = await User.findById(req.user.id)
-    if (!user) {
-      res.status(404).json({
-        success: false,
-        message: "User not found",
-      })
-      return
-    }
-
-    res.status(200).json({
-      success: true,
-      user,
-    })
-  } catch (error) {
-    console.error("Get current user error:", error)
-    res.status(500).json({
-      success: false,
-      message: "Failed to get user",
-    })
-  }
-}
-
-// Verify token
-export const verifyToken = async (req: Request, res: Response): Promise<void> => {
-  try {
-    // Get token from cookie
-    const token = req.cookies.token
-
-    if (!token) {
-      res.status(401).json({
-        success: false,
-        message: "Not authenticated",
-      })
-      return
-    }
-
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your_jwt_secret_key") as {
-      id: string
-      role: string
-    }
-
-    // Check if user exists
-    const user = await User.findById(decoded.id)
-    if (!user) {
-      res.status(401).json({
-        success: false,
-        message: "User not found",
-      })
-      return
-    }
-
-    res.status(200).json({
-      success: true,
-      message: "Token is valid",
-      user,
-    })
-  } catch (error) {
-    console.error("Verify token error:", error)
-    res.status(401).json({
-      success: false,
-      message: "Invalid token",
-    })
-  }
-}
+};

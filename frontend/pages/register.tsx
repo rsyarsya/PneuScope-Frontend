@@ -39,7 +39,7 @@ const Register: NextPage = () => {
       // Remove confirmPassword before sending to API
       const { confirmPassword, ...userData } = values
 
-      const response = await axios.post("/api/auth/register", userData)
+      const response = await axios.post("https://v0-pneu-scope-production.up.railway.app/auth/register", userData)
 
       if (response.data.success) {
         router.push("/login?registered=true")

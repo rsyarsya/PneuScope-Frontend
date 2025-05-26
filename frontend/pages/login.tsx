@@ -25,7 +25,7 @@ const Login: NextPage = () => {
     setError(null)
 
     try {
-      const response = await axios.post("https://v0-pneu-scope-production.up.railway.app/auth", values, {
+      const response = await axios.post("https://v0-pneu-scope-production.up.railway.app/api/auth/login", values, {
         withCredentials: true,
       })
 

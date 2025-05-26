@@ -61,7 +61,7 @@ const Dashboard: NextPage<DashboardProps> = ({ user }) => {
   useEffect(() => {
     if (isCapturing && !socket) {
       // Connect to socket server
-      const newSocket = io(process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:4000")
+      const newSocket = io(process.env.NEXT_PUBLIC_SOCKET_URL || "https://v0-pneu-scope-production.up.railway.app/")
 
       newSocket.on("connect", () => {
         console.log("Connected to socket server")

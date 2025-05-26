@@ -89,7 +89,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (isCapturing && !socket) {
       // Connect to socket server
-      const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:4000"
+      const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "https://v0-pneu-scope-production.up.railway.app/"
       const newSocket = io(socketUrl)
 
       newSocket.on("connect", () => {

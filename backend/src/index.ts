@@ -44,7 +44,7 @@ app.use(cookieParser())
 app.use(morgan("dev"))
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+    origin: process.env.CORS_ORIGIN || "https://v0-pneu-scope.vercel.app",
     credentials: true,
   }),
 )
@@ -60,8 +60,8 @@ const swaggerOptions = {
     },
     servers: [
       {
-        url: `http://localhost:${process.env.PORT || 4000}`,
-        description: "Development server",
+        url: process.env.API_URL || "https://v0-pneu-scope-production.up.railway.app",
+        description: "Production server",
       },
     ],
   },

@@ -6,7 +6,6 @@ import { useRouter } from "next/router"
 import { useState } from "react"
 import { Formik, Form, Field, ErrorMessage } from "formik"
 import * as Yup from "yup"
-import axios from "axios"
 import Navbar from "../components/Navbar"
 
 // Validation schema
@@ -14,6 +13,26 @@ const LoginSchema = Yup.object().shape({
   email: Yup.string().email("Invalid email address").required("Email is required"),
   password: Yup.string().required("Password is required").min(6, "Password must be at least 6 characters"),
 })
+
+// Mock login function
+const mockLogin = async (values: { email: string; password: string }) => {
+  // Simulate a delay to mimic API call
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  
+  // Mock user data
+  const mockUser = {
+    id: "mock-id",
+    email: values.email,
+    role: values.email.includes("admin") ? "admin" : "doctor", // Simple role check based on email
+  };
+  
+  return {
+    data: {
+      success: true,
+      user: mockUser,
+    },
+  };
+};
 
 const Login: NextPage = () => {
   const router = useRouter()
@@ -25,17 +44,14 @@ const Login: NextPage = () => {
     setError(null)
 
     try {
-      const response = await axios.post("https://v0-pneu-scope-production.up.railway.app/api/auth/login", values, {
-        withCredentials: true,
-      })
+      const response = await mockLogin(values);
 
       if (response.data.success) {
-        // Store user info in localStorage (not the token, which is in HTTP-only cookie)
         localStorage.setItem("user", JSON.stringify(response.data.user))
         router.push("/dashboard")
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || "Login failed. Please try again.")
+      setError("Login failed. Please try again.")
     } finally {
       setIsLoading(false)
     }

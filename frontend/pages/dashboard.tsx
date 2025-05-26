@@ -3,8 +3,6 @@
 import type { GetServerSideProps, NextPage } from "next"
 import Head from "next/head"
 import { useState, useEffect } from "react"
-import axios from "axios"
-import { io, type Socket } from "socket.io-client"
 import Navbar from "../components/Navbar"
 import PatientForm from "../components/PatientForm"
 import LiveChart from "../components/LiveChart"
@@ -30,71 +28,40 @@ interface DashboardProps {
   user: User
 }
 
+// Mock patient data
+const mockPatients: Patient[] = [
+  { _id: "1", name: "John Doe", dob: "2018-05-15", allergies: "None", medicalHistory: "Healthy" },
+  { _id: "2", name: "Jane Smith", dob: "2019-07-22", allergies: "Peanuts", medicalHistory: "Asthma" },
+];
+
 const Dashboard: NextPage<DashboardProps> = ({ user }) => {
   const [patients, setPatients] = useState<Patient[]>([])
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
   const [audioData, setAudioData] = useState<number[]>([])
   const [isCapturing, setIsCapturing] = useState(false)
-  const [socket, setSocket] = useState<Socket | null>(null)
   const [riskScore, setRiskScore] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Fetch patients on component mount
+  // Set mock patients on component mount
   useEffect(() => {
-    const fetchPatients = async () => {
-      try {
-        const response = await axios.get("/api/patients")
-        setPatients(response.data)
-      } catch (err) {
-        setError("Failed to fetch patients")
-        console.error(err)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    fetchPatients()
+    setPatients(mockPatients)
+    setIsLoading(false)
   }, [])
 
-  // Socket.io connection
+  // Simulate audio data capture
   useEffect(() => {
-    if (isCapturing && !socket) {
-      // Connect to socket server
-      const newSocket = io(process.env.NEXT_PUBLIC_SOCKET_URL || "https://v0-pneu-scope-production.up.railway.app/")
+    if (isCapturing) {
+      const interval = setInterval(() => {
+        const randomData = Array(5).fill(0).map(() => Math.floor(Math.random() * 50) + 30)
+        setAudioData((prevData) => [...prevData, ...randomData].slice(-60))
+      }, 1000)
 
-      newSocket.on("connect", () => {
-        console.log("Connected to socket server")
-      })
-
-      newSocket.on("audio-data", (data: number[]) => {
-        setAudioData((prevData) => {
-          // Keep only the last 60 seconds of data (assuming 1 data point per second)
-          const newData = [...prevData, ...data]
-          return newData.slice(-60)
-        })
-      })
-
-      newSocket.on("disconnect", () => {
-        console.log("Disconnected from socket server")
-      })
-
-      setSocket(newSocket)
-    } else if (!isCapturing && socket) {
-      // Disconnect socket when not capturing
-      socket.disconnect()
-      setSocket(null)
+      return () => clearInterval(interval)
     }
+  }, [isCapturing])
 
-    // Cleanup on component unmount
-    return () => {
-      if (socket) {
-        socket.disconnect()
-      }
-    }
-  }, [isCapturing, socket])
-
-  // Function to start audio capture
+  // Start audio capture
   const startCapture = () => {
     if (!selectedPatient) {
       alert("Please select a patient first")
@@ -106,51 +73,34 @@ const Dashboard: NextPage<DashboardProps> = ({ user }) => {
     setRiskScore(null)
   }
 
-  // Function to stop audio capture and send data for analysis
-  const stopCapture = async () => {
+  // Stop audio capture and simulate risk score
+  const stopCapture = () => {
     setIsCapturing(false)
-
-    if (audioData.length === 0) {
-      alert("No audio data captured")
-      return
-    }
-
-    try {
-      // Send audio data to ML service for analysis
-      const response = await axios.post("/api/predict", {
-        patientId: selectedPatient?._id,
-        audio: audioData,
-      })
-
-      setRiskScore(response.data.risk_score)
-    } catch (err) {
-      console.error("Failed to analyze audio data:", err)
-      alert("Failed to analyze audio data")
+    if (audioData.length > 0) {
+      const mockRiskScore = Math.floor(Math.random() * 100)
+      setRiskScore(mockRiskScore)
     }
   }
 
-  // Function to handle patient selection
+  // Handle patient selection
   const handlePatientSelect = (patient: Patient) => {
     setSelectedPatient(patient)
-    // Reset data when changing patients
     setAudioData([])
     setRiskScore(null)
     setIsCapturing(false)
   }
 
-  // Function to handle patient form submission (create/update)
+  // Handle patient form submission (create/update)
   const handlePatientSubmit = async (patientData: Omit<Patient, "_id">) => {
     try {
       if (selectedPatient) {
-        // Update existing patient
-        const response = await axios.put(`/api/patients/${selectedPatient._id}`, patientData)
-        setPatients((prevPatients) => prevPatients.map((p) => (p._id === selectedPatient._id ? response.data : p)))
-        setSelectedPatient(response.data)
+        const updatedPatient = { ...selectedPatient, ...patientData }
+        setPatients((prevPatients) => prevPatients.map((p) => (p._id === selectedPatient._id ? updatedPatient : p)))
+        setSelectedPatient(updatedPatient)
       } else {
-        // Create new patient
-        const response = await axios.post("/api/patients", patientData)
-        setPatients((prevPatients) => [...prevPatients, response.data])
-        setSelectedPatient(response.data)
+        const newPatient = { _id: Date.now().toString(), ...patientData }
+        setPatients((prevPatients) => [...prevPatients, newPatient])
+        setSelectedPatient(newPatient)
       }
     } catch (err) {
       console.error("Failed to save patient:", err)
@@ -158,14 +108,13 @@ const Dashboard: NextPage<DashboardProps> = ({ user }) => {
     }
   }
 
-  // Function to delete a patient
+  // Handle patient deletion
   const handleDeletePatient = async (patientId: string) => {
     if (!confirm("Are you sure you want to delete this patient?")) {
       return
     }
 
     try {
-      await axios.delete(`/api/patients/${patientId}`)
       setPatients((prevPatients) => prevPatients.filter((p) => p._id !== patientId))
       if (selectedPatient?._id === patientId) {
         setSelectedPatient(null)
@@ -178,25 +127,6 @@ const Dashboard: NextPage<DashboardProps> = ({ user }) => {
       alert("Failed to delete patient")
     }
   }
-
-  // Simulate audio data if socket is not available (for demo purposes)
-  useEffect(() => {
-    if (isCapturing && !socket) {
-      const interval = setInterval(() => {
-        // Generate random audio data between 30-80 dB
-        const randomData = Array(5)
-          .fill(0)
-          .map(() => Math.floor(Math.random() * 50) + 30)
-
-        setAudioData((prevData) => {
-          const newData = [...prevData, ...randomData]
-          return newData.slice(-60)
-        })
-      }, 1000)
-
-      return () => clearInterval(interval)
-    }
-  }, [isCapturing, socket])
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -318,33 +248,20 @@ const Dashboard: NextPage<DashboardProps> = ({ user }) => {
   )
 }
 
+// Simulate server-side props with mock user
 export const getServerSideProps: GetServerSideProps = async (context) => {
-  try {
-    // Get the token from cookies
-    const { req } = context
+  const mockUser: User = {
+    _id: "mock-id",
+    name: "Mock User",
+    email: "mock@example.com",
+    role: "doctor",
+  };
 
-    // Call the API to verify the token and get user data
-    const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/auth/verify`, {
-      headers: {
-        Cookie: req.headers.cookie || "",
-      },
-    })
-
-    // If the user is authenticated, return the user data
-    return {
-      props: {
-        user: response.data.user,
-      },
-    }
-  } catch (error) {
-    // If the user is not authenticated, redirect to login
-    return {
-      redirect: {
-        destination: "/login",
-        permanent: false,
-      },
-    }
-  }
+  return {
+    props: {
+      user: mockUser,
+    },
+  };
 }
 
 export default Dashboard

@@ -6,7 +6,7 @@ import { useRouter, usePathname } from "next/navigation"
 import axios from "axios"
 
 // Konfigurasi axios untuk deployment
-axios.defaults.baseURL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+axios.defaults.baseURL = process.env.NEXT_PUBLIC_API_URL || "https://v0-pneu-scope-production.up.railway.app/"
 axios.defaults.withCredentials = true
 
 interface User {

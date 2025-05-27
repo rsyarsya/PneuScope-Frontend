@@ -4,7 +4,6 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Formik, Form, Field, ErrorMessage } from "formik"
 import * as Yup from "yup"
-import axios from "axios"
 
 // Validation schema
 const RegisterSchema = Yup.object().shape({
@@ -14,8 +13,37 @@ const RegisterSchema = Yup.object().shape({
   confirmPassword: Yup.string()
     .oneOf([Yup.ref("password")], "Passwords must match")
     .required("Confirm password is required"),
-  role: Yup.string().oneOf(["doctor"], "Only doctor registration is allowed").required("Role is required"),
+  role: Yup.string().oneOf(["doctor", "parent"], "Role must be either Doctor or Parent").required("Role is required"),
 })
+
+// Mock registration function to simulate registration without backend
+const mockRegister = async (values: {
+  name: string
+  email: string
+  password: string
+  role: string
+}) => {
+  // Simulate a delay to mimic API call
+  await new Promise((resolve) => setTimeout(resolve, 1000))
+
+  // Simulate storing the user data in localStorage
+  const mockUser = {
+    id: Date.now().toString(), // Simple ID generation
+    name: values.name,
+    email: values.email,
+    role: values.role,
+  }
+
+  // Simulate saving user data (in a real app, this would be sent to backend)
+  const existingUsers = JSON.parse(localStorage.getItem("registeredUsers") || "[]")
+  localStorage.setItem("registeredUsers", JSON.stringify([...existingUsers, mockUser]))
+
+  return {
+    data: {
+      success: true,
+    },
+  }
+}
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -33,16 +61,16 @@ export default function RegisterPage() {
     setError(null)
 
     try {
-      // Remove confirmPassword before sending to API
+      // Remove confirmPassword before processing
       const { confirmPassword, ...userData } = values
 
-      const response = await axios.post("/api/auth/register", userData)
+      const response = await mockRegister(userData)
 
       if (response.data.success) {
         router.push("/login?registered=true")
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || "Registration failed. Please try again.")
+      setError("Registration failed. Please try again.")
     } finally {
       setIsLoading(false)
     }
@@ -137,11 +165,9 @@ export default function RegisterPage() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                     >
                       <option value="doctor">Doctor</option>
+                      <option value="parent">Parent</option>
                     </Field>
                     <ErrorMessage name="role" component="div" className="mt-1 text-red-500 text-sm" />
-                    <p className="mt-1 text-sm text-gray-500">
-                      Note: Admin accounts are created by system administrators.
-                    </p>
                   </div>
 
                   <button

@@ -3,17 +3,13 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter, usePathname } from "next/navigation"
-import axios from "axios"
 
-// Konfigurasi axios untuk deployment
-axios.defaults.baseURL = process.env.NEXT_PUBLIC_API_URL || "https://v0-pneu-scope-production.up.railway.app/"
-axios.defaults.withCredentials = true
-
+// Konfigurasi tipe User
 interface User {
   _id: string
   name: string
   email: string
-  role: "admin" | "doctor"
+  role: "doctor" | "parent"
 }
 
 export default function Navbar() {
@@ -39,16 +35,9 @@ export default function Navbar() {
     setIsLoading(false)
   }, [pathname])
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     try {
-      // Tambahkan error handling yang lebih baik
-      try {
-        await axios.post("/api/auth/logout", {}, { withCredentials: true })
-      } catch (err) {
-        console.warn("Logout API call failed, continuing with local logout:", err)
-      }
-
-      // Tetap lakukan logout lokal meskipun API gagal
+      // Perform local logout by removing user from localStorage
       localStorage.removeItem("user")
       setUser(null)
       router.push("/")
@@ -192,6 +181,12 @@ export default function Navbar() {
           )}
         </div>
       </div>
+
+      {error && (
+        <div className="container mx-auto px-4 py-2">
+          <div className="p-3 bg-red-100 text-red-700 rounded-md">{error}</div>
+        </div>
+      )}
     </nav>
   )
 }

@@ -1,12 +1,9 @@
 "use client"
 
-import type { NextPage } from "next"
-import Head from "next/head"
-import { useRouter } from "next/router"
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Formik, Form, Field, ErrorMessage } from "formik"
 import * as Yup from "yup"
-import Navbar from "../components/Navbar"
 
 // Validation schema
 const LoginSchema = Yup.object().shape({
@@ -14,27 +11,27 @@ const LoginSchema = Yup.object().shape({
   password: Yup.string().required("Password is required").min(6, "Password must be at least 6 characters"),
 })
 
-// Mock login function
+// Mock login function to simulate login without backend
 const mockLogin = async (values: { email: string; password: string }) => {
   // Simulate a delay to mimic API call
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-  
+  await new Promise((resolve) => setTimeout(resolve, 1000))
+
   // Mock user data
   const mockUser = {
     id: "mock-id",
     email: values.email,
-    role: values.email.includes("admin") ? "admin" : "doctor", // Simple role check based on email
-  };
-  
+    role: values.email.includes("parent") ? "parent" : "doctor", // Role check based on email
+  }
+
   return {
     data: {
       success: true,
       user: mockUser,
     },
-  };
-};
+  }
+}
 
-const Login: NextPage = () => {
+export default function LoginPage() {
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -44,9 +41,10 @@ const Login: NextPage = () => {
     setError(null)
 
     try {
-      const response = await mockLogin(values);
+      const response = await mockLogin(values)
 
       if (response.data.success) {
+        // Store user info in localStorage
         localStorage.setItem("user", JSON.stringify(response.data.user))
         router.push("/dashboard")
       }
@@ -59,14 +57,6 @@ const Login: NextPage = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Head>
-        <title>Login - PneuScope</title>
-        <meta name="description" content="Login to PneuScope dashboard" />
-        <link rel="icon" href="/favicon.ico" />
-      </Head>
-
-      <Navbar />
-
       <main className="container mx-auto px-4 py-12">
         <div className="max-w-md mx-auto bg-white rounded-lg shadow-md overflow-hidden">
           <div className="px-6 py-8">
@@ -118,8 +108,8 @@ const Login: NextPage = () => {
 
             <div className="mt-4 text-center text-sm text-gray-600">
               <p>Demo Credentials:</p>
-              <p>Admin: admin@pneuscope.com / password123</p>
               <p>Doctor: doctor@pneuscope.com / password123</p>
+              <p>Parent: parent@pneuscope.com / password123</p>
             </div>
           </div>
         </div>
@@ -127,5 +117,3 @@ const Login: NextPage = () => {
     </div>
   )
 }
-
-export default Login

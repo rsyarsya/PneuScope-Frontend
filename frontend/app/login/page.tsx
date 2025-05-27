@@ -4,13 +4,32 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Formik, Form, Field, ErrorMessage } from "formik"
 import * as Yup from "yup"
-import axios from "axios"
 
 // Validation schema
 const LoginSchema = Yup.object().shape({
   email: Yup.string().email("Invalid email address").required("Email is required"),
   password: Yup.string().required("Password is required").min(6, "Password must be at least 6 characters"),
 })
+
+// Mock login function to simulate login without backend
+const mockLogin = async (values: { email: string; password: string }) => {
+  // Simulate a delay to mimic API call
+  await new Promise((resolve) => setTimeout(resolve, 1000))
+
+  // Mock user data
+  const mockUser = {
+    id: "mock-id",
+    email: values.email,
+    role: values.email.includes("parent") ? "parent" : "doctor", // Role check based on email
+  }
+
+  return {
+    data: {
+      success: true,
+      user: mockUser,
+    },
+  }
+}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -22,17 +41,15 @@ export default function LoginPage() {
     setError(null)
 
     try {
-      const response = await axios.post("/api/auth/login", values, {
-        withCredentials: true,
-      })
+      const response = await mockLogin(values)
 
       if (response.data.success) {
-        // Store user info in localStorage (not the token, which is in HTTP-only cookie)
+        // Store user info in localStorage
         localStorage.setItem("user", JSON.stringify(response.data.user))
         router.push("/dashboard")
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || "Login failed. Please try again.")
+      setError("Login failed. Please try again.")
     } finally {
       setIsLoading(false)
     }
@@ -91,8 +108,8 @@ export default function LoginPage() {
 
             <div className="mt-4 text-center text-sm text-gray-600">
               <p>Demo Credentials:</p>
-              <p>Admin: admin@pneuscope.com / password123</p>
               <p>Doctor: doctor@pneuscope.com / password123</p>
+              <p>Parent: parent@pneuscope.com / password123</p>
             </div>
           </div>
         </div>
